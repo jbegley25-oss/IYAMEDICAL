@@ -6,7 +6,7 @@ import { siteConfig } from '@/content/site'
 export function ImmersiveHero() {
   return (
     <section className="relative flex min-h-[104vh] items-center overflow-hidden">
-      <div className="pointer-events-none absolute inset-0 z-[1] bg-[radial-gradient(circle_at_50%_40%,rgba(3,16,29,0.06)_0%,rgba(3,16,29,0.34)_46%,rgba(1,7,18,0.88)_100%)]" />
+      <div className="pointer-events-none absolute inset-0 z-[1] bg-[radial-gradient(circle_at_50%_40%,rgba(3,16,29,0.03)_0%,rgba(3,16,29,0.22)_46%,rgba(1,7,18,0.82)_100%)]" />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-48 bg-gradient-to-b from-transparent via-[#010712]/50 to-[#010712]" />
 
       <div className="relative z-10 mx-auto w-full max-w-4xl px-6 text-center">
