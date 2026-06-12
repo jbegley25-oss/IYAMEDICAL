@@ -1,25 +1,11 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import * as THREE from 'three'
 
-type MemoryPoint = {
-  x: number
-  y: number
-  strength: number
-  age: number
-}
-
-type StrandPoint = {
-  x: number
-  y: number
-  z: number
-  t: number
-  strand: 0 | 1
-  heat: number
-  alpha: number
-}
-
-const MAX_SAMPLES = 240
+const SAMPLES = 256
+const TURNS = 4.7
+const RUNG_COUNT = 56
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value))
@@ -34,18 +20,118 @@ function smoothstep(edge0: number, edge1: number, value: number) {
   return t * t * (3 - 2 * t)
 }
 
-function hsla(h: number, s: number, l: number, a = 1) {
-  return `hsla(${h}, ${s}%, ${l}%, ${a})`
+function hsvToRgb(h: number, s: number, v: number): [number, number, number] {
+  const i = Math.floor(h * 6)
+  const f = h * 6 - i
+  const p = v * (1 - s)
+  const q = v * (1 - f * s)
+  const t = v * (1 - (1 - f) * s)
+  switch (i % 6) {
+    case 0: return [v, t, p]
+    case 1: return [q, v, p]
+    case 2: return [p, v, t]
+    case 3: return [p, q, v]
+    case 4: return [t, p, v]
+    default: return [v, p, q]
+  }
 }
 
+class HelixCurve extends THREE.Curve<THREE.Vector3> {
+  constructor(
+    private radius: number,
+    private height: number,
+    private phase: number
+  ) {
+    super()
+  }
+
+  getPoint(t: number, target = new THREE.Vector3()) {
+    const angle = t * TURNS * Math.PI * 2 + this.phase
+    return target.set(
+      Math.cos(angle) * this.radius,
+      (0.5 - t) * this.height,
+      Math.sin(angle) * this.radius
+    )
+  }
+}
+
+const STRAND_VERTEX = /* glsl */ `
+  varying vec2 vUv;
+  varying vec3 vNormal;
+  varying vec3 vViewPos;
+
+  void main() {
+    vUv = uv;
+    vNormal = normalMatrix * normal;
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    vViewPos = mv.xyz;
+    gl_Position = projectionMatrix * mv;
+  }
+`
+
+const STRAND_FRAGMENT = /* glsl */ `
+  precision highp float;
+
+  uniform sampler2D uHeat;
+  uniform float uTime;
+  uniform float uOpacity;
+
+  varying vec2 vUv;
+  varying vec3 vNormal;
+  varying vec3 vViewPos;
+
+  vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+  }
+
+  void main() {
+    float heat = texture2D(uHeat, vec2(vUv.x, 0.5)).r;
+
+    vec3 N = normalize(vNormal);
+    vec3 V = normalize(-vViewPos);
+    vec3 L1 = normalize(vec3(0.55, 0.65, 0.7));
+    vec3 L2 = normalize(vec3(-0.6, -0.25, 0.5));
+
+    float dif = max(dot(N, L1), 0.0) * 0.85 + max(dot(N, L2), 0.0) * 0.35;
+    float spec = pow(max(dot(reflect(-L1, N), V), 0.0), 64.0);
+    float fres = pow(1.0 - max(dot(N, V), 0.0), 2.5);
+
+    // Resting look: glossy porcelain white with a cool rim.
+    vec3 base = vec3(0.88, 0.93, 1.0) * (0.42 + 0.6 * dif)
+      + vec3(1.0) * spec * 0.9
+      + vec3(0.62, 0.82, 1.0) * fres * 0.5;
+
+    // Ignited look: liquid spectral color flowing along the strand.
+    float hot = smoothstep(0.02, 0.55, heat);
+    float flow = vUv.x * 10.0
+      - uTime * 0.45
+      + 0.42 * sin(vUv.x * 34.0 + uTime * 1.7)
+      + 0.26 * sin(vUv.y * 6.2831 + uTime * 1.1)
+      + heat * 0.7;
+    vec3 rainbow = hsv2rgb(vec3(fract(flow), 0.97, 1.0));
+
+    vec3 col = mix(
+      base,
+      rainbow * (0.5 + 0.5 * dif) + vec3(spec) * 0.9 + rainbow * fres * 0.7,
+      hot
+    );
+    col += rainbow * hot * 0.5;
+
+    float edge = smoothstep(0.0, 0.045, vUv.x) * (1.0 - smoothstep(0.955, 1.0, vUv.x));
+    gl_FragColor = vec4(col, uOpacity * edge);
+  }
+`
+
 /**
- * Premium medical DNA visual system.
+ * Hero DNA helix — real 3D (three.js).
  *
- * Interaction model: passing the cursor directly over the structure ignites
- * a neon spectral shimmer. Each strand sample carries its own heat that
- * flares quickly and then cools back to the resting cool blue-white. As the
- * page scrolls past the hero, the whole structure recedes — dimmer, thinner,
- * quieter — so content takes over.
+ * Two thick glossy-white tubes spin slowly around a vertical axis. Passing
+ * the cursor directly over a strand injects "heat" at that spot; heat
+ * diffuses along the strand like ink in water and drives a flowing spectral
+ * shader — the liquid rainbow — then cools back to porcelain white. The
+ * whole structure recedes as the hero scrolls away.
  */
 export function DnaHelix() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -53,119 +139,184 @@ export function DnaHelix() {
   useEffect(() => {
     const canvas = canvasRef.current
     const parent = canvas?.parentElement
-    const ctx = canvas?.getContext('2d')
-    if (!canvas || !parent || !ctx) return
+    if (!canvas || !parent) return
+
+    let renderer: THREE.WebGLRenderer
+    try {
+      renderer = new THREE.WebGLRenderer({
+        canvas,
+        antialias: true,
+        alpha: true,
+        powerPreference: 'high-performance',
+      })
+    } catch {
+      return
+    }
+    renderer.setClearColor(0x000000, 0)
+    renderer.outputColorSpace = THREE.SRGBColorSpace
+    renderer.toneMapping = THREE.NoToneMapping
+
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+    const scene = new THREE.Scene()
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -4000, 4000)
+    camera.position.z = 600
+
+    const group = new THREE.Group()
+    scene.add(group)
 
     let width = 0
     let height = 0
-    let dpr = 1
-    let raf = 0
-    let visible = true
     let scrollPhase = 0
     let heroFocus = 1
-    // Whole structure leans gently toward the cursor — parallax life.
-    let sway = 0
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    let visible = true
+    let raf = 0
 
-    const pointer = {
-      x: -9999,
-      y: -9999,
-      targetX: -9999,
-      targetY: -9999,
-      active: false,
-    }
-    const memory: MemoryPoint[] = []
-    let lastMemory = 0
+    const pointer = { x: -9999, y: -9999, active: false }
+    const raycaster = new THREE.Raycaster()
+    const ndc = new THREE.Vector2()
 
-    // Persistent per-sample heat: index = sample * 2 + strand. Lets a touched
-    // segment keep glowing after the cursor moves on, then cool back to blue.
-    const heatStore = new Float32Array(MAX_SAMPLES * 2)
-
-    // The base gradients never change between resizes, so they are rendered
-    // once into an offscreen layer and blitted each frame.
-    const bgLayer = document.createElement('canvas')
-    const bgCtx = bgLayer.getContext('2d')
-
-    const paintBackgroundLayer = () => {
-      if (!bgCtx) return
-      bgLayer.width = Math.max(1, Math.floor(width * dpr))
-      bgLayer.height = Math.max(1, Math.floor(height * dpr))
-      bgCtx.setTransform(dpr, 0, 0, dpr, 0, 0)
-
-      const bg = bgCtx.createLinearGradient(0, 0, width, height)
-      bg.addColorStop(0, '#03101d')
-      bg.addColorStop(0.44, '#061a2e')
-      bg.addColorStop(1, '#010712')
-      bgCtx.fillStyle = bg
-      bgCtx.fillRect(0, 0, width, height)
-
-      const abyss = bgCtx.createRadialGradient(
-        width * 0.5,
-        height * 0.38,
-        0,
-        width * 0.5,
-        height * 0.38,
-        Math.max(width, height) * 0.72
+    // Heat per strand, diffused every frame so touches bleed like liquid.
+    const heat = [new Float32Array(SAMPLES), new Float32Array(SAMPLES)]
+    const scratch = new Float32Array(SAMPLES)
+    const heatTextures = heat.map(() => {
+      const tex = new THREE.DataTexture(
+        new Uint8Array(SAMPLES * 4),
+        SAMPLES,
+        1,
+        THREE.RGBAFormat
       )
-      abyss.addColorStop(0, 'rgba(18, 74, 105, 0.28)')
-      abyss.addColorStop(0.42, 'rgba(5, 28, 50, 0.12)')
-      abyss.addColorStop(1, 'rgba(0, 0, 0, 0.38)')
-      bgCtx.fillStyle = abyss
-      bgCtx.fillRect(0, 0, width, height)
+      tex.magFilter = THREE.LinearFilter
+      tex.minFilter = THREE.LinearFilter
+      tex.needsUpdate = true
+      return tex
+    })
+
+    const strandMaterials = heatTextures.map(
+      (tex) =>
+        new THREE.ShaderMaterial({
+          vertexShader: STRAND_VERTEX,
+          fragmentShader: STRAND_FRAGMENT,
+          uniforms: {
+            uHeat: { value: tex },
+            uTime: { value: 0 },
+            uOpacity: { value: 1 },
+          },
+          transparent: true,
+        })
+    )
+
+    const strandMeshes = strandMaterials.map((material, index) => {
+      const mesh = new THREE.Mesh(new THREE.BufferGeometry(), material)
+      mesh.userData.strand = index
+      group.add(mesh)
+      return mesh
+    })
+
+    // Invisible fatter tubes make the cursor hit test forgiving.
+    const hitMeshes = strandMeshes.map((_, index) => {
+      const mesh = new THREE.Mesh(
+        new THREE.BufferGeometry(),
+        new THREE.MeshBasicMaterial()
+      )
+      mesh.userData.strand = index
+      mesh.visible = false
+      group.add(mesh)
+      return mesh
+    })
+
+    const rungMaterial = new THREE.MeshBasicMaterial({
+      transparent: true,
+      opacity: 0.42,
+    })
+    const rungGeometry = new THREE.CylinderGeometry(1, 1, 1, 8, 1)
+    const rungs = new THREE.InstancedMesh(rungGeometry, rungMaterial, RUNG_COUNT)
+    rungs.instanceColor = new THREE.InstancedBufferAttribute(
+      new Float32Array(RUNG_COUNT * 3),
+      3
+    )
+    group.add(rungs)
+
+    const curves: [HelixCurve, HelixCurve] = [
+      new HelixCurve(1, 1, 0),
+      new HelixCurve(1, 1, Math.PI),
+    ]
+
+    const rebuildGeometry = () => {
+      const mobile = width < 720
+      const radius = clamp(width * (mobile ? 0.22 : 0.185), mobile ? 68 : 110, mobile ? 118 : 236)
+      const tubeRadius = clamp(width * 0.011, 8, mobile ? 11 : 15)
+      const helixHeight = height * 1.12
+
+      curves[0] = new HelixCurve(radius, helixHeight, 0)
+      curves[1] = new HelixCurve(radius, helixHeight, Math.PI)
+
+      strandMeshes.forEach((mesh, index) => {
+        mesh.geometry.dispose()
+        mesh.geometry = new THREE.TubeGeometry(curves[index], 420, tubeRadius, 14, false)
+      })
+      hitMeshes.forEach((mesh, index) => {
+        mesh.geometry.dispose()
+        mesh.geometry = new THREE.TubeGeometry(curves[index], 140, tubeRadius * 3, 6, false)
+      })
+
+      const a = new THREE.Vector3()
+      const b = new THREE.Vector3()
+      const matrix = new THREE.Matrix4()
+      const position = new THREE.Vector3()
+      const quaternion = new THREE.Quaternion()
+      const scale = new THREE.Vector3()
+      const up = new THREE.Vector3(0, 1, 0)
+      const dir = new THREE.Vector3()
+
+      for (let i = 0; i < RUNG_COUNT; i += 1) {
+        const t = mix(0.035, 0.965, i / (RUNG_COUNT - 1))
+        curves[0].getPoint(t, a)
+        curves[1].getPoint(t, b)
+        position.addVectors(a, b).multiplyScalar(0.5)
+        dir.subVectors(b, a)
+        const length = dir.length()
+        quaternion.setFromUnitVectors(up, dir.normalize())
+        scale.set(tubeRadius * 0.32, length, tubeRadius * 0.32)
+        matrix.compose(position, quaternion, scale)
+        rungs.setMatrixAt(i, matrix)
+      }
+      rungs.instanceMatrix.needsUpdate = true
+      group.position.x = mobile ? 0 : width * 0.03
     }
 
     const resize = () => {
       const rect = parent.getBoundingClientRect()
-      dpr = Math.min(window.devicePixelRatio || 1, 2)
       width = Math.max(1, rect.width)
       height = Math.max(1, rect.height)
-      canvas.width = Math.floor(width * dpr)
-      canvas.height = Math.floor(height * dpr)
-      canvas.style.width = `${width}px`
-      canvas.style.height = `${height}px`
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-      paintBackgroundLayer()
-    }
-
-    const addMemory = (x: number, y: number, strength = 1) => {
-      memory.push({ x, y, strength, age: 0 })
-      if (memory.length > 34) memory.shift()
-    }
-
-    const onPointerMove = (event: PointerEvent) => {
-      const rect = canvas.getBoundingClientRect()
-      const x = event.clientX - rect.left
-      const y = event.clientY - rect.top
-      const inside = x >= 0 && y >= 0 && x <= rect.width && y <= rect.height
-
-      pointer.active = inside
-      if (!inside) return
-
-      if (pointer.x < -1000) {
-        pointer.x = x
-        pointer.y = y
-      }
-
-      pointer.targetX = x
-      pointer.targetY = y
-
-      const now = performance.now()
-      if (now - lastMemory > 26) {
-        addMemory(x, y, 0.9)
-        lastMemory = now
-      }
-    }
-
-    const onPointerLeave = () => {
-      pointer.active = false
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
+      renderer.setSize(width, height, false)
+      camera.left = -width / 2
+      camera.right = width / 2
+      camera.top = height / 2
+      camera.bottom = -height / 2
+      camera.updateProjectionMatrix()
+      rebuildGeometry()
     }
 
     const onScroll = () => {
       const rect = parent.getBoundingClientRect()
       const travel = window.innerHeight + rect.height
       scrollPhase = clamp((window.innerHeight - rect.top) / Math.max(1, travel), 0, 1)
-      // Full presence at the top of the page; recede once the hero scrolls by.
       heroFocus = 1 - smoothstep(0.12, 0.92, window.scrollY / Math.max(1, window.innerHeight))
+    }
+
+    const onPointerMove = (event: PointerEvent) => {
+      const rect = canvas.getBoundingClientRect()
+      const x = event.clientX - rect.left
+      const y = event.clientY - rect.top
+      pointer.active = x >= 0 && y >= 0 && x <= rect.width && y <= rect.height
+      pointer.x = x
+      pointer.y = y
+    }
+
+    const onPointerLeave = () => {
+      pointer.active = false
     }
 
     const ro = new ResizeObserver(resize)
@@ -185,253 +336,90 @@ export function DnaHelix() {
     window.addEventListener('pointerout', onPointerLeave)
     window.addEventListener('scroll', onScroll, { passive: true })
 
-    // Tight radius: the flare ignites only where the cursor actually touches
-    // the structure, not from across the hero.
-    const heatAt = (x: number, y: number) => {
-      const range = 85
-      let heat = 0
-
-      if (pointer.active) {
-        const distance = Math.hypot(x - pointer.x, y - pointer.y)
-        heat += Math.pow(Math.max(0, 1 - distance / range), 1.25) * 2
+    const injectHeat = (strand: number, t: number) => {
+      const center = t * (SAMPLES - 1)
+      for (let di = -9; di <= 9; di += 1) {
+        const idx = Math.round(center + di)
+        if (idx < 0 || idx >= SAMPLES) continue
+        const gain = Math.exp((-di * di) / 16) * 0.6
+        heat[strand][idx] = Math.min(1.35, heat[strand][idx] + gain)
       }
-
-      for (const point of memory) {
-        const distance = Math.hypot(x - point.x, y - point.y)
-        const wave = Math.max(0, 1 - distance / range)
-        const fade = Math.pow(1 - point.age, 1.7) * point.strength
-        heat += Math.pow(wave, 1.6) * fade * 0.9
-      }
-
-      return clamp(heat, 0, 1)
     }
 
-    const drawBackground = (time: number) => {
-      ctx.save()
-      ctx.setTransform(1, 0, 0, 1, 0, 0)
-      ctx.drawImage(bgLayer, 0, 0)
-      ctx.restore()
-
-      ctx.save()
-      ctx.globalAlpha = 0.28
-      for (let i = 0; i < 90; i += 1) {
-        const x = ((Math.sin(i * 17.17) * 0.5 + 0.5) * width + time * 0.004 * (i % 3)) % width
-        const y = ((i * 61 + time * 0.008) % (height + 180)) - 90
-        const radius = 0.35 + (i % 5) * 0.12
-        ctx.fillStyle = i % 2 ? 'rgba(112, 194, 213, 0.08)' : 'rgba(229, 242, 244, 0.04)'
-        ctx.beginPath()
-        ctx.arc(x, y, radius, 0, Math.PI * 2)
-        ctx.fill()
-      }
-      ctx.restore()
-    }
-
-    const drawCursorHeat = (time: number) => {
-      if (!pointer.active && memory.length === 0) return
-
-      const x = pointer.active ? pointer.x : memory[memory.length - 1]?.x ?? -9999
-      const y = pointer.active ? pointer.y : memory[memory.length - 1]?.y ?? -9999
-      const radius = clamp(Math.max(width, window.innerHeight) * 0.15, 145, 280)
-      const glow = ctx.createRadialGradient(x, y, 0, x, y, radius)
-      glow.addColorStop(0, 'rgba(168, 224, 255, 0.16)')
-      glow.addColorStop(0.24, 'rgba(120, 190, 255, 0.08)')
-      glow.addColorStop(0.5, 'rgba(60, 150, 200, 0.03)')
-      glow.addColorStop(1, 'rgba(0, 0, 0, 0)')
-
-      ctx.save()
-      ctx.globalCompositeOperation = 'screen'
-      ctx.globalAlpha = heroFocus
-      ctx.fillStyle = glow
-      ctx.fillRect(0, 0, width, height)
-      ctx.restore()
-    }
-
-    const project = (rawT: number, strand: 0 | 1, time: number) => {
-      const t = rawT
-      const mobile = width < 720
-      const centerX = width * (mobile ? 0.5 : 0.53) + sway
-      const radius = clamp(width * (mobile ? 0.22 : 0.185), mobile ? 68 : 110, mobile ? 118 : 236)
-      const turns = mobile ? 4.1 : 4.7
-      const spin = reduceMotion ? 0 : time * 0.00022
-      const scrollRotation = scrollPhase * Math.PI * 2.1
-      const phase = strand === 0 ? 0 : Math.PI
-      const angle = t * Math.PI * 2 * turns + spin + scrollRotation + phase
-      const z = Math.sin(angle)
-      const perspective = mix(0.62, 1.08, (z + 1) * 0.5)
-      const x = centerX + Math.cos(angle) * radius * perspective
-      const visibleTop = -height * 0.08
-      const visibleHeight = height * 1.12
-      const y = visibleTop + t * visibleHeight
-      return { x, y, z, t, strand }
-    }
-
-    // Rest state is a cool blue-white (silvery, like a lit glass sculpture);
-    // direct cursor contact ignites fully saturated neon spectral color.
-    const colorFor = (heat: number, depth: number, t: number, time: number) => {
-      const hot = smoothstep(0.04, 0.6, heat)
-      const spectral = (time * 0.14 + t * 1500 + depth * 200) % 360
-      const hue = mix(207, spectral, hot)
-      const sat = mix(34, 100, hot)
-      // A slow energy pulse travels up the strands so the helix breathes
-      // even before the cursor arrives — brightness only.
-      const pulse = Math.pow(0.5 + 0.5 * Math.cos(t * Math.PI * 7 - time * 0.0042), 9)
-      const light = mix(70 + depth * 14 + pulse * 12, 58, hot)
-      return { hue, sat, light, hot, pulse }
-    }
-
-    const makePoints = (time: number) => {
-      const points: StrandPoint[] = []
-      const count = width < 720 ? 150 : 190
-      const travel = scrollPhase * 0.24
-      const presence = mix(0.24, 1, heroFocus)
-
-      // Cool every sample a little each frame; touched samples re-ignite below.
-      for (let i = 0; i < heatStore.length; i += 1) {
-        heatStore[i] *= reduceMotion ? 0.9 : 0.965
-      }
-
-      for (let i = 0; i < count; i += 1) {
-        const baseT = i / (count - 1)
-        const t = baseT + travel
-        if (t < -0.03 || t > 1.28) continue
-
-        for (const strand of [0, 1] as const) {
-          const point = project(t, strand, time)
-          const depth = (point.z + 1) * 0.5
-          const edgeFade = smoothstep(-0.03, 0.1, baseT) * (1 - smoothstep(0.88, 1.03, baseT))
-
-          const slot = i * 2 + strand
-          const target = heatAt(point.x, point.y)
-          if (target > heatStore[slot]) {
-            heatStore[slot] += (target - heatStore[slot]) * 0.5
-          }
-
-          points.push({
-            ...point,
-            heat: heatStore[slot],
-            alpha: edgeFade * (0.2 + depth * 0.8) * presence,
-          })
+    const stepHeat = (dt: number) => {
+      // Time-based so the cool-down takes ~1.8s regardless of frame rate.
+      const decay = Math.pow(reduceMotion ? 0.012 : 0.18, dt)
+      for (let s = 0; s < 2; s += 1) {
+        const arr = heat[s]
+        for (let i = 0; i < SAMPLES; i += 1) {
+          const left = arr[Math.max(0, i - 1)]
+          const right = arr[Math.min(SAMPLES - 1, i + 1)]
+          scratch[i] = (arr[i] * 0.62 + (left + right) * 0.19) * decay
         }
-      }
+        arr.set(scratch)
 
-      return points
-    }
-
-    // Glow is faked with a wide, faint "halo" stroke under a bright core
-    // stroke — same look as shadowBlur at a fraction of the cost, which keeps
-    // the page smooth on devices without GPU compositing.
-    const drawBackbone = (points: StrandPoint[], time: number) => {
-      ctx.save()
-      ctx.globalCompositeOperation = 'screen'
-      ctx.lineCap = 'round'
-
-      for (const strand of [0, 1] as const) {
-        const strandPoints = points
-          .filter((point) => point.strand === strand)
-          .sort((a, b) => a.t - b.t)
-
-        for (let i = 1; i < strandPoints.length; i += 1) {
-          const a = strandPoints[i - 1]
-          const b = strandPoints[i]
-          const depth = ((a.z + b.z) * 0.5 + 1) * 0.5
-          const heat = Math.max(a.heat, b.heat)
-          const color = colorFor(heat, depth, b.t, time)
-          const coreWidth = (2.4 + depth * 4.6 + color.hot * 3) * b.alpha
-          if (coreWidth <= 0.05) continue
-
-          ctx.beginPath()
-          ctx.moveTo(a.x, a.y)
-          ctx.lineTo(b.x, b.y)
-
-          // Neon tube: wide colored bloom, solid colored body, white-hot core.
-          const haloAlpha = (0.06 + color.hot * 0.26 + color.pulse * 0.05) * b.alpha
-          if (haloAlpha > 0.018) {
-            ctx.strokeStyle = hsla(color.hue, color.sat, color.light, haloAlpha)
-            ctx.lineWidth = coreWidth * (3.4 + color.hot * 3)
-            ctx.stroke()
-          }
-
-          ctx.strokeStyle = hsla(color.hue, color.sat, color.light, (0.2 + depth * 0.34 + color.hot * 0.35 + color.pulse * 0.14) * b.alpha)
-          ctx.lineWidth = coreWidth
-          ctx.stroke()
-
-          if (color.hot > 0.25) {
-            ctx.strokeStyle = hsla(color.hue, 46, 88, color.hot * 0.85 * b.alpha)
-            ctx.lineWidth = coreWidth * 0.42
-            ctx.stroke()
-          }
+        const data = heatTextures[s].image.data as Uint8Array
+        for (let i = 0; i < SAMPLES; i += 1) {
+          data[i * 4] = Math.min(255, arr[i] * 255)
         }
+        heatTextures[s].needsUpdate = true
       }
-      ctx.restore()
     }
 
-    const drawRungs = (points: StrandPoint[], time: number) => {
-      const byKey = new Map<string, StrandPoint>()
-      for (const point of points) {
-        const key = `${Math.round(point.t * 1000)}-${point.strand}`
-        byKey.set(key, point)
+    const pickAndIgnite = () => {
+      if (!pointer.active) return
+      ndc.set((pointer.x / width) * 2 - 1, -(pointer.y / height) * 2 + 1)
+      raycaster.setFromCamera(ndc, camera)
+      const hits = raycaster.intersectObjects(hitMeshes, false)
+      const hit = hits[0]
+      if (hit?.uv) {
+        injectHeat(hit.object.userData.strand as number, hit.uv.x)
       }
-
-      const sorted = points
-        .filter((point) => point.strand === 0)
-        .sort((a, b) => a.t - b.t)
-
-      ctx.save()
-      ctx.globalCompositeOperation = 'screen'
-
-      for (let i = 0; i < sorted.length; i += 3) {
-        const a = sorted[i]
-        const b = byKey.get(`${Math.round(a.t * 1000)}-1`)
-        if (!a || !b) continue
-
-        const depth = ((a.z + b.z) * 0.25) + 0.5
-        const heat = Math.max(a.heat, b.heat)
-        const color = colorFor(heat, depth, a.t, time)
-        // Offset hue across the rung so a hot rung refracts like a prism.
-        const midHue = color.hot > 0.05 ? (color.hue + color.hot * 35) % 360 : color.hue
-
-        ctx.beginPath()
-        ctx.moveTo(a.x, a.y)
-        ctx.lineTo(b.x, b.y)
-        if (color.hot > 0.08) {
-          ctx.strokeStyle = hsla(color.hue, color.sat, color.light, color.hot * 0.12)
-          ctx.lineWidth = (0.7 + depth * 1.5 + color.hot * 1.2) * 3
-          ctx.stroke()
-        }
-        ctx.strokeStyle = hsla(midHue, color.sat, color.light + 10, 0.07 + ((a.alpha + b.alpha) * 0.5) * 0.2 + color.hot * 0.24)
-        ctx.lineWidth = 0.7 + depth * 1.5 + color.hot * 1.2
-        ctx.stroke()
-      }
-      ctx.restore()
     }
 
+    const rungColor = new THREE.Color()
+    const updateRungColors = (timeSec: number) => {
+      for (let i = 0; i < RUNG_COUNT; i += 1) {
+        const t = mix(0.035, 0.965, i / (RUNG_COUNT - 1))
+        const idx = Math.round(t * (SAMPLES - 1))
+        const h = Math.max(heat[0][idx], heat[1][idx])
+        const hot = smoothstep(0.02, 0.55, h)
+        // Mirror the strand shader's flowing hue so rungs match their strands.
+        const hue = (((t * 10 - timeSec * 0.45) % 1) + 1) % 1
+        const [r, g, b] = hsvToRgb(hue, 0.97, 1)
+        rungColor.setRGB(
+          mix(0.94, r, hot),
+          mix(0.97, g, hot),
+          mix(1.0, b, hot)
+        )
+        rungs.setColorAt(i, rungColor)
+      }
+      if (rungs.instanceColor) rungs.instanceColor.needsUpdate = true
+    }
 
-    const render = (time: number) => {
+    let lastTime = 0
+    const render = (timeMs: number) => {
       raf = requestAnimationFrame(render)
       if (!visible) return
 
-      pointer.x += (pointer.targetX - pointer.x) * 0.28
-      pointer.y += (pointer.targetY - pointer.y) * 0.28
+      const time = timeMs / 1000
+      const dt = clamp(time - (lastTime || time), 0.001, 0.1)
+      lastTime = time
+      const presence = mix(0.22, 1, heroFocus)
 
-      const anchorX = width * (width < 720 ? 0.5 : 0.53)
-      const targetSway = pointer.active && !reduceMotion
-        ? clamp((pointer.x - anchorX) * 0.055, -width * 0.045, width * 0.045)
-        : 0
-      sway += (targetSway - sway) * 0.04
+      pickAndIgnite()
+      stepHeat(dt)
+      updateRungColors(time)
 
-      for (const point of memory) {
-        point.age += reduceMotion ? 0.075 : 0.038
-      }
-      while (memory.length && memory[0].age >= 1) {
-        memory.shift()
-      }
+      group.rotation.y = (reduceMotion ? 0 : time * 0.42) + scrollPhase * Math.PI * 2.1
 
-      drawBackground(time)
-      drawCursorHeat(time)
+      strandMaterials.forEach((material) => {
+        material.uniforms.uTime.value = time
+        material.uniforms.uOpacity.value = presence
+      })
+      rungMaterial.opacity = 0.42 * presence
 
-      const points = makePoints(time)
-      drawBackbone(points, time)
-      drawRungs(points, time)
+      renderer.render(scene, camera)
     }
 
     raf = requestAnimationFrame(render)
@@ -443,6 +431,16 @@ export function DnaHelix() {
       window.removeEventListener('pointermove', onPointerMove)
       window.removeEventListener('pointerout', onPointerLeave)
       window.removeEventListener('scroll', onScroll)
+      strandMeshes.forEach((mesh) => mesh.geometry.dispose())
+      hitMeshes.forEach((mesh) => {
+        mesh.geometry.dispose()
+        ;(mesh.material as THREE.Material).dispose()
+      })
+      strandMaterials.forEach((material) => material.dispose())
+      heatTextures.forEach((tex) => tex.dispose())
+      rungGeometry.dispose()
+      rungMaterial.dispose()
+      renderer.dispose()
     }
   }, [])
 
@@ -451,6 +449,10 @@ export function DnaHelix() {
       ref={canvasRef}
       aria-hidden="true"
       className="pointer-events-none absolute inset-0 z-0 h-full w-full"
+      style={{
+        background:
+          'radial-gradient(1100px 760px at 50% 30%, #0a2236 0%, #061a2e 46%, #010712 100%)',
+      }}
     />
   )
 }
