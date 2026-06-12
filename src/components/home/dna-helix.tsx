@@ -63,6 +63,8 @@ export function DnaHelix() {
     let visible = true
     let scrollPhase = 0
     let heroFocus = 1
+    // Whole structure leans gently toward the cursor — parallax life.
+    let sway = 0
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
     const pointer = {
@@ -184,22 +186,22 @@ export function DnaHelix() {
     window.addEventListener('scroll', onScroll, { passive: true })
 
     const heatAt = (x: number, y: number, t: number, z: number, time: number) => {
-      const range = clamp(Math.max(width, window.innerHeight) * 0.17, 160, 320)
+      const range = clamp(Math.max(width, window.innerHeight) * 0.21, 190, 400)
       let heat = 0
 
       if (pointer.active) {
         const distance = Math.hypot(x - pointer.x, y - pointer.y)
         const cursorWave = Math.max(0, 1 - distance / range)
         const movingBand = (Math.cos(distance * 0.035 - time * 0.007 + t * 10) + 1) * 0.5
-        const alignment = smoothstep(0.16, 0.78, cursorWave * 0.82 + movingBand * 0.18)
-        heat += Math.pow(cursorWave, 1.7) * alignment * 1.55
+        const alignment = smoothstep(0.12, 0.72, cursorWave * 0.82 + movingBand * 0.18)
+        heat += Math.pow(cursorWave, 1.55) * alignment * 1.75
       }
 
       for (const point of memory) {
         const distance = Math.hypot(x - point.x, y - point.y)
         const wave = Math.max(0, 1 - distance / (range * 0.82))
         const fade = Math.pow(1 - point.age, 1.7) * point.strength
-        heat += Math.pow(wave, 2.12) * fade * 0.82
+        heat += Math.pow(wave, 2.12) * fade * 0.95
       }
 
       const frontBoost = smoothstep(0.1, 1, (z + 1) * 0.5) * 0.08
@@ -260,8 +262,8 @@ export function DnaHelix() {
     const project = (rawT: number, strand: 0 | 1, time: number) => {
       const t = rawT
       const mobile = width < 720
-      const centerX = width * (mobile ? 0.5 : 0.53)
-      const radius = clamp(width * (mobile ? 0.2 : 0.16), mobile ? 60 : 96, mobile ? 104 : 196)
+      const centerX = width * (mobile ? 0.5 : 0.53) + sway
+      const radius = clamp(width * (mobile ? 0.22 : 0.185), mobile ? 68 : 110, mobile ? 118 : 236)
       const turns = mobile ? 4.1 : 4.7
       const spin = reduceMotion ? 0 : time * 0.00022
       const scrollRotation = scrollPhase * Math.PI * 2.1
@@ -282,12 +284,15 @@ export function DnaHelix() {
      * and as the per-sample heat cools the color settles back into blue.
      */
     const colorFor = (heat: number, depth: number, t: number, time: number) => {
-      const hot = smoothstep(0.06, 0.8, heat)
-      const spectral = (time * 0.085 + t * 1080 + depth * 150) % 360
-      const hue = mix(193, spectral, hot)
-      const sat = mix(74, 100, hot)
-      const light = mix(46 + depth * 18, 64 + hot * 6, hot)
-      return { hue, sat, light, hot }
+      const hot = smoothstep(0.05, 0.72, heat)
+      const spectral = (time * 0.12 + t * 1400 + depth * 180) % 360
+      const hue = mix(199, spectral, hot)
+      const sat = mix(90, 100, hot)
+      // A slow energy pulse travels up the strands so the helix breathes
+      // even before the cursor arrives — stays blue, only brightness moves.
+      const pulse = Math.pow(0.5 + 0.5 * Math.cos(t * Math.PI * 7 - time * 0.0042), 9)
+      const light = mix(50 + depth * 20 + pulse * 16, 66 + hot * 10, hot)
+      return { hue, sat, light, hot, pulse }
     }
 
     const makePoints = (time: number) => {
@@ -347,18 +352,21 @@ export function DnaHelix() {
           const depth = ((a.z + b.z) * 0.5 + 1) * 0.5
           const heat = Math.max(a.heat, b.heat)
           const color = colorFor(heat, depth, b.t, time)
-          const coreWidth = (1.2 + depth * 3.4 + color.hot * 2.4) * b.alpha
+          const coreWidth = (1.4 + depth * 3.8 + color.hot * 3) * b.alpha
           if (coreWidth <= 0.05) continue
 
           ctx.beginPath()
           ctx.moveTo(a.x, a.y)
           ctx.lineTo(b.x, b.y)
 
-          ctx.strokeStyle = hsla(color.hue, color.sat, color.light, (0.04 + color.hot * 0.1) * b.alpha)
-          ctx.lineWidth = coreWidth * (3.4 + color.hot * 2)
-          ctx.stroke()
+          const haloAlpha = (0.05 + color.hot * 0.16 + color.pulse * 0.05) * b.alpha
+          if (haloAlpha > 0.018) {
+            ctx.strokeStyle = hsla(color.hue, color.sat, color.light, haloAlpha)
+            ctx.lineWidth = coreWidth * (3.6 + color.hot * 2.4)
+            ctx.stroke()
+          }
 
-          ctx.strokeStyle = hsla(color.hue, color.sat, color.light, (0.1 + depth * 0.24 + color.hot * 0.2) * b.alpha)
+          ctx.strokeStyle = hsla(color.hue, color.sat, color.light, (0.14 + depth * 0.3 + color.hot * 0.3 + color.pulse * 0.14) * b.alpha)
           ctx.lineWidth = coreWidth
           ctx.stroke()
         }
@@ -377,7 +385,10 @@ export function DnaHelix() {
         .filter((point) => point.strand === 0)
         .sort((a, b) => a.t - b.t)
 
-      for (let i = 0; i < sorted.length; i += 4) {
+      ctx.save()
+      ctx.globalCompositeOperation = 'screen'
+
+      for (let i = 0; i < sorted.length; i += 3) {
         const a = sorted[i]
         const b = byKey.get(`${Math.round(a.t * 1000)}-1`)
         if (!a || !b) continue
@@ -386,15 +397,8 @@ export function DnaHelix() {
         const heat = Math.max(a.heat, b.heat)
         const color = colorFor(heat, depth, a.t, time)
         // Offset hue across the rung so a hot rung refracts like a prism.
-        const farHue = color.hot > 0.05 ? (color.hue + color.hot * 70) % 360 : color.hue
+        const midHue = color.hot > 0.05 ? (color.hue + color.hot * 35) % 360 : color.hue
 
-        const gradient = ctx.createLinearGradient(a.x, a.y, b.x, b.y)
-        gradient.addColorStop(0, hsla(color.hue, color.sat, color.light + 6, 0.03 + a.alpha * 0.18 + color.hot * 0.2))
-        gradient.addColorStop(0.5, hsla((color.hue + farHue) * 0.5, color.sat, color.light + 11, 0.08 + a.alpha * 0.22 + color.hot * 0.26))
-        gradient.addColorStop(1, hsla(farHue, color.sat, color.light + 6, 0.03 + b.alpha * 0.18 + color.hot * 0.2))
-
-        ctx.save()
-        ctx.globalCompositeOperation = 'screen'
         ctx.beginPath()
         ctx.moveTo(a.x, a.y)
         ctx.lineTo(b.x, b.y)
@@ -403,11 +407,11 @@ export function DnaHelix() {
           ctx.lineWidth = (0.7 + depth * 1.5 + color.hot * 1.2) * 3
           ctx.stroke()
         }
-        ctx.strokeStyle = gradient
+        ctx.strokeStyle = hsla(midHue, color.sat, color.light + 10, 0.07 + ((a.alpha + b.alpha) * 0.5) * 0.2 + color.hot * 0.24)
         ctx.lineWidth = 0.7 + depth * 1.5 + color.hot * 1.2
         ctx.stroke()
-        ctx.restore()
       }
+      ctx.restore()
     }
 
     const drawNodes = (points: StrandPoint[], time: number) => {
@@ -419,11 +423,11 @@ export function DnaHelix() {
       for (const point of sorted) {
         const depth = (point.z + 1) * 0.5
         const color = colorFor(point.heat, depth, point.t, time)
-        const size = (1.9 + depth * 5 + color.hot * 2.6) * point.alpha
+        const size = (2.1 + depth * 5.6 + color.hot * 3.2) * point.alpha
         if (size <= 0.1) continue
 
         // Soft halo, bright core, white-hot center — pearl without gradients.
-        ctx.fillStyle = hsla(color.hue, color.sat, color.light, 0.1 + color.hot * 0.12)
+        ctx.fillStyle = hsla(color.hue, color.sat, color.light, 0.12 + color.hot * 0.18 + color.pulse * 0.08)
         ctx.beginPath()
         ctx.arc(point.x, point.y, size * 2.2, 0, Math.PI * 2)
         ctx.fill()
@@ -457,6 +461,12 @@ export function DnaHelix() {
 
       pointer.x += (pointer.targetX - pointer.x) * 0.28
       pointer.y += (pointer.targetY - pointer.y) * 0.28
+
+      const anchorX = width * (width < 720 ? 0.5 : 0.53)
+      const targetSway = pointer.active && !reduceMotion
+        ? clamp((pointer.x - anchorX) * 0.055, -width * 0.045, width * 0.045)
+        : 0
+      sway += (targetSway - sway) * 0.04
 
       for (const point of memory) {
         point.age += reduceMotion ? 0.075 : 0.038
