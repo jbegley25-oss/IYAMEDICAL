@@ -10,9 +10,20 @@ import { Tracker } from "@/components/shared/tracker";
 export function SiteShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isAnalytics = pathname.startsWith("/analytics");
+  const isHome = pathname === "/";
 
   if (isAnalytics) {
     return <>{children}</>;
+  }
+
+  if (isHome) {
+    return (
+      <>
+        <Header />
+        <main className="flex-1">{children}</main>
+        <Tracker />
+      </>
+    );
   }
 
   return (

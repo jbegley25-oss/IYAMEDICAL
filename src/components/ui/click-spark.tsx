@@ -40,16 +40,17 @@ const ClickSpark = ({
     const canvas = canvasRef.current
     if (!canvas) return
 
-    const parent = canvas.parentElement
-    if (!parent) return
-
     let resizeTimeout: ReturnType<typeof setTimeout>
 
     const resizeCanvas = () => {
-      const { width, height } = parent.getBoundingClientRect()
+      const dpr = Math.min(window.devicePixelRatio || 1, 2)
+      const width = Math.floor(window.innerWidth * dpr)
+      const height = Math.floor(window.innerHeight * dpr)
       if (canvas.width !== width || canvas.height !== height) {
         canvas.width = width
         canvas.height = height
+        canvas.style.width = `${window.innerWidth}px`
+        canvas.style.height = `${window.innerHeight}px`
       }
     }
 
@@ -58,13 +59,11 @@ const ClickSpark = ({
       resizeTimeout = setTimeout(resizeCanvas, 100)
     }
 
-    const ro = new ResizeObserver(handleResize)
-    ro.observe(parent)
-
+    window.addEventListener('resize', handleResize)
     resizeCanvas()
 
     return () => {
-      ro.disconnect()
+      window.removeEventListener('resize', handleResize)
       clearTimeout(resizeTimeout)
     }
   }, [])
@@ -92,6 +91,7 @@ const ClickSpark = ({
     if (!ctx) return
 
     let animationId: number
+    const dpr = Math.min(window.devicePixelRatio || 1, 2)
 
     const draw = (timestamp: number) => {
       if (!startTimeRef.current) {
@@ -111,13 +111,13 @@ const ClickSpark = ({
         const distance = eased * sparkRadius * extraScale
         const lineLength = sparkSize * (1 - eased)
 
-        const x1 = spark.x + distance * Math.cos(spark.angle)
-        const y1 = spark.y + distance * Math.sin(spark.angle)
-        const x2 = spark.x + (distance + lineLength) * Math.cos(spark.angle)
-        const y2 = spark.y + (distance + lineLength) * Math.sin(spark.angle)
+        const x1 = (spark.x + distance * Math.cos(spark.angle)) * dpr
+        const y1 = (spark.y + distance * Math.sin(spark.angle)) * dpr
+        const x2 = (spark.x + (distance + lineLength) * Math.cos(spark.angle)) * dpr
+        const y2 = (spark.y + (distance + lineLength) * Math.sin(spark.angle)) * dpr
 
         ctx.strokeStyle = sparkColor
-        ctx.lineWidth = 2
+        ctx.lineWidth = 2 * dpr
         ctx.beginPath()
         ctx.moveTo(x1, y1)
         ctx.lineTo(x2, y2)
@@ -137,16 +137,10 @@ const ClickSpark = ({
   }, [sparkColor, sparkSize, sparkRadius, sparkCount, duration, easeFunc, extraScale])
 
   const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const rect = canvas.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
-
     const now = performance.now()
     const newSparks: Spark[] = Array.from({ length: sparkCount }, (_, i) => ({
-      x,
-      y,
+      x: e.clientX,
+      y: e.clientY,
       angle: (2 * Math.PI * i) / sparkCount,
       startTime: now,
     }))
@@ -162,11 +156,9 @@ const ClickSpark = ({
       <canvas
         ref={canvasRef}
         style={{
-          width: '100%',
-          height: '100%',
           display: 'block',
           userSelect: 'none',
-          position: 'absolute',
+          position: 'fixed',
           top: 0,
           left: 0,
           pointerEvents: 'none',

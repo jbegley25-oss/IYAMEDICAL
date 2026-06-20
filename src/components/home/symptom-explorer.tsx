@@ -58,7 +58,7 @@ export function SymptomExplorer() {
   const searching = query.trim().length >= 2
 
   return (
-    <section className="relative overflow-hidden bg-transparent py-20 sm:py-28" id="find-care">
+    <section className="relative overflow-hidden bg-transparent pb-20 pt-6 sm:pb-28 sm:pt-8" id="find-care">
       {/* Ambient glow — decorative only, never hides content */}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(34,211,238,0.08),transparent_45%),radial-gradient(circle_at_80%_90%,rgba(251,146,60,0.08),transparent_42%),linear-gradient(to_bottom,rgba(1,7,18,0.24),rgba(1,7,18,0.72)_34%,rgba(1,7,18,0.94))]" />
 

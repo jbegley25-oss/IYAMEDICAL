@@ -12,6 +12,12 @@
   --font-mono: var(--font-geist-mono);
   --font-heading: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
 
+  /* Swiss-editorial type system (Dayos reference, dark-adapted).
+     next/font overrides --font-display / --font-mono-tag on <html> with the
+     loaded families; these literals act as the fallback, mirroring --font-sans. */
+  --font-display: 'Barlow Condensed', 'Roboto Condensed', ui-sans-serif, sans-serif;
+  --font-mono-tag: 'JetBrains Mono', ui-monospace, monospace;
+
   /* IYA Brand Teal Palette */
   --color-brand-50: #ecfeff;
   --color-brand-100: #cffafe;
@@ -144,6 +150,25 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+}
+
+/* ──────────── Swiss-editorial type helpers ──────────── */
+
+/* Monumental condensed display headline: 0.90 line-height, -0.03em tracking.
+   Apply at >=48px only — the tight leading collapses below that. */
+.display-head {
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 0.9;
+  letter-spacing: -0.03em;
+}
+
+/* 12px mono micro-voice for kickers, tags, and category labels. */
+.tag-mono {
+  font-family: var(--font-mono-tag);
+  font-weight: 400;
+  font-size: 0.75rem;
+  letter-spacing: -0.03em;
 }
 
 /* ──────────── Clean Utility Classes ──────────── */

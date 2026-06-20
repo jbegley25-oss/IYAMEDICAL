@@ -1,54 +1,33 @@
 'use client'
 
-import { ArrowRight, ChevronDown } from 'lucide-react'
-import { siteConfig } from '@/content/site'
+import { HelixBuilder } from './helix-builder'
 
 export function ImmersiveHero() {
   return (
-    <section className="relative flex min-h-[104vh] items-center overflow-hidden">
-      <div className="pointer-events-none absolute inset-0 z-[1] bg-[radial-gradient(circle_at_50%_40%,rgba(3,16,29,0.03)_0%,rgba(3,16,29,0.22)_46%,rgba(1,7,18,0.82)_100%)]" />
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-48 bg-gradient-to-b from-transparent via-[#010712]/50 to-[#010712]" />
+    <section data-helix-scroll className="relative h-[118svh] overflow-visible">
+      <div className="sticky top-0 min-h-[100svh] overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 z-[1] bg-[radial-gradient(ellipse_at_50%_62%,rgba(56,78,130,0.22)_0%,rgba(8,13,31,0.18)_30%,rgba(1,4,12,0.0)_62%),radial-gradient(circle_at_45%_118%,rgba(124,58,237,0.13)_0%,rgba(1,4,12,0.0)_42%),linear-gradient(115deg,#01030a_0%,#020513_48%,#00030a_100%)]" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-[10vh] bg-gradient-to-t from-[#010712] via-[#010712]/60 to-transparent" />
 
-      <div className="relative z-10 mx-auto w-full max-w-4xl px-6 text-center">
-        <p className="text-xs font-semibold uppercase tracking-[0.42em] text-cyan-200/90 sm:text-sm">
-          IYA Medical
-        </p>
-
-        <h1 className="mx-auto mt-7 max-w-3xl text-5xl font-light leading-[0.96] tracking-tight text-white sm:text-7xl lg:text-8xl">
-          Find your care.
-          <br />
-          <span className="text-cyan-200">Precisely.</span>
-        </h1>
-
-        <p className="mx-auto mt-7 max-w-xl text-base leading-relaxed text-slate-300 sm:text-lg">
-          Explore symptoms, procedures, and consultation paths with one guided flow.
-        </p>
-
-        <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
+        <div className="absolute inset-x-0 top-24 z-30 mx-auto flex max-w-5xl flex-col items-center px-6 text-center sm:top-28">
+          <p className="max-w-4xl text-balance text-4xl font-light tracking-tight text-white sm:text-5xl lg:text-6xl">
+            Arizona&apos;s Most Advanced Medical Practice
+          </p>
+          <p className="mt-4 text-base font-normal tracking-wide text-slate-200/90 sm:text-lg">
+            Hyper-specialized and minimally invasive procedures. No down time. Only healing.
+          </p>
           <a
-            href="#find-care"
-            className="inline-flex h-13 items-center justify-center gap-2 rounded-full bg-cyan-200 px-8 text-base font-semibold text-slate-950 transition-all duration-300 hover:bg-orange-300 hover:shadow-[0_0_42px_rgba(251,146,60,0.38)]"
+            href="/patient-intake"
+            className="mt-7 inline-flex animate-pulse items-center justify-center rounded-full border border-white/20 bg-white px-6 py-3 text-sm font-semibold tracking-wide text-slate-950 shadow-[0_0_34px_rgba(255,255,255,0.22)] transition hover:border-cyan-200 hover:bg-cyan-50 focus:outline-none focus:ring-2 focus:ring-cyan-200 focus:ring-offset-2 focus:ring-offset-slate-950"
           >
-            Find your care
-            <ArrowRight className="h-4 w-4" />
-          </a>
-          <a
-            href={siteConfig.phoneHref}
-            className="inline-flex h-13 items-center justify-center rounded-full border border-white/15 bg-white/[0.025] px-8 text-base font-semibold text-white backdrop-blur-sm transition-all duration-300 hover:border-orange-300/60 hover:bg-orange-300/10 hover:text-orange-100"
-          >
-            {siteConfig.phone}
+            Now Accepting
           </a>
         </div>
-      </div>
 
-      <a
-        href="#find-care"
-        aria-label="Scroll to find your care"
-        className="absolute bottom-7 left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-1.5 text-slate-500 transition-colors hover:text-orange-200"
-      >
-        <span className="text-xs font-medium uppercase tracking-widest">Explore</span>
-        <ChevronDown className="h-5 w-5 animate-bounce" />
-      </a>
+        <div className="absolute inset-0 z-10">
+          <HelixBuilder />
+        </div>
+      </div>
     </section>
   )
 }

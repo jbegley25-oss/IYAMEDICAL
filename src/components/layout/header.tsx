@@ -40,8 +40,8 @@ export function Header() {
       className={cn(
         "fixed top-0 right-0 left-0 z-50 transition-all duration-300",
         scrolled
-          ? "border-b border-cyan-300/10 bg-slate-950/92 shadow-lg shadow-slate-950/30 backdrop-blur-xl"
-          : "border-b border-white/10 bg-slate-950/78 backdrop-blur-xl"
+          ? "border-b border-[#37b5db]/20 bg-[#020513]/92 shadow-lg shadow-[#4d5bd6]/15 backdrop-blur-xl"
+          : "border-b border-white/10 bg-[#020513]/72 backdrop-blur-xl"
       )}
     >
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -56,7 +56,7 @@ export function Header() {
             priority
           />
           <span className="text-base font-bold tracking-tight whitespace-nowrap" style={{
-            background: 'linear-gradient(90deg, #5eead4, #22d3ee, #818cf8, #a78bfa, #f472b6, #fb923c, #4ade80, #5eead4)',
+            background: 'linear-gradient(90deg, #eb201b, #f5762c, #fed434, #a8e648, #4fd196, #37b5db, #4d5bd6, #ce2edf, #eb201b)',
             backgroundSize: '300% 100%',
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
@@ -79,27 +79,27 @@ export function Header() {
               >
                 <Link
                   href={link.href}
-                  className="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 transition-colors hover:text-cyan-200"
+                  className="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-medium text-slate-200 transition-colors hover:text-[#37b5db]"
                 >
                   {link.label}
                   <ChevronDown
                     className={cn(
-                      "size-3.5 text-slate-500 transition-transform duration-200",
-                      openDropdown === link.label && "rotate-180"
+                      "size-3.5 text-[#4d5bd6]/60 transition-all duration-200",
+                      openDropdown === link.label && "rotate-180 text-[#ce2edf]"
                     )}
                   />
                 </Link>
                 {openDropdown === link.label && (
                   <div className="absolute left-0 z-50 w-72 pt-2" style={{ top: '100%' }}>
-                    <div className="rounded-xl border border-cyan-300/10 bg-slate-950/95 p-2 shadow-xl shadow-slate-950/50 backdrop-blur-xl">
+                    <div className="rounded-xl border border-[#37b5db]/20 bg-[#020513]/95 p-2 shadow-xl shadow-[#4d5bd6]/20 backdrop-blur-xl">
                       {link.children.map((child) => (
                         <Link
                           key={child.href}
                           href={child.href}
                           onClick={closeDropdown}
-                          className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-slate-300 transition-colors hover:bg-cyan-300/10 hover:text-cyan-100"
+                          className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-slate-200 transition-colors hover:bg-[#37b5db]/10 hover:text-white"
                         >
-                          <ChevronRight className="size-3.5 text-cyan-300" />
+                          <ChevronRight className="size-3.5 text-[#a8e648]" />
                           {child.label}
                         </Link>
                       ))}
@@ -111,7 +111,7 @@ export function Header() {
               <Link
                 key={link.label}
                 href={link.href}
-                className="rounded-lg px-3 py-2 text-sm font-medium text-slate-300 transition-colors hover:text-cyan-200"
+                className="rounded-lg px-3 py-2 text-sm font-medium text-slate-200 transition-colors hover:text-[#37b5db]"
               >
                 {link.label}
               </Link>
@@ -123,14 +123,14 @@ export function Header() {
         <div className="hidden items-center gap-3 lg:flex">
           <a
             href={siteConfig.phoneHref}
-            className="flex items-center gap-1.5 text-sm font-medium text-slate-300 transition-colors hover:text-cyan-200"
+            className="flex items-center gap-1.5 text-sm font-medium text-slate-200 transition-colors hover:text-[#37b5db]"
           >
             <Phone className="size-4" />
             {siteConfig.phone}
           </a>
           <a
             href="/patient-intake"
-            className="inline-flex h-9 items-center rounded-full bg-cyan-300 px-5 text-sm font-semibold text-slate-950 transition-colors hover:bg-emerald-300"
+            className="inline-flex h-9 items-center rounded-full border border-white/20 bg-[linear-gradient(90deg,#fed434,#a8e648,#4fd196,#37b5db)] px-5 text-sm font-semibold text-slate-950 shadow-[0_0_28px_rgba(55,181,219,0.22)] transition-opacity hover:opacity-90"
           >
             Start Intake
           </a>
@@ -146,19 +146,19 @@ export function Header() {
           </a>
           <Sheet>
             <SheetTrigger
-              className="inline-flex size-9 items-center justify-center rounded-lg bg-cyan-300/10 text-cyan-200 hover:bg-cyan-300/20"
+              className="inline-flex size-9 items-center justify-center rounded-lg border border-[#37b5db]/20 bg-[#37b5db]/10 text-[#37b5db] hover:bg-[#37b5db]/18"
             >
               <Menu className="size-5" />
               <span className="sr-only">Open menu</span>
             </SheetTrigger>
-            <SheetContent side="right" className="w-80 overflow-y-auto p-0">
-              <SheetHeader className="border-b border-gray-100 p-4">
+            <SheetContent side="right" className="w-80 overflow-y-auto border-[#37b5db]/20 bg-[#020513] p-0 text-white">
+              <SheetHeader className="border-b border-[#37b5db]/20 p-4">
                 <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
                 <SheetClose
                   render={
                     <Link
                       href="/patient-forms"
-                      className="inline-flex h-11 w-full items-center justify-center rounded-full bg-teal-600 text-sm font-semibold text-white hover:bg-teal-700"
+                      className="inline-flex h-11 w-full items-center justify-center rounded-full bg-[linear-gradient(90deg,#fed434,#a8e648,#4fd196,#37b5db)] text-sm font-semibold text-slate-950 shadow-[0_0_28px_rgba(55,181,219,0.22)] hover:opacity-90"
                     >
                       Start Intake
                     </Link>
@@ -171,7 +171,7 @@ export function Header() {
                   "children" in link && link.children ? (
                     <Accordion key={link.label}>
                       <AccordionItem value={link.label} className="border-none">
-                        <AccordionTrigger className="rounded-lg px-3 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:no-underline">
+                        <AccordionTrigger className="rounded-lg px-3 py-3 text-sm font-medium text-slate-200 hover:bg-[#37b5db]/10 hover:text-white hover:no-underline">
                           {link.label}
                         </AccordionTrigger>
                         <AccordionContent className="pl-3">
@@ -181,9 +181,9 @@ export function Header() {
                               render={
                                 <Link
                                   href={child.href}
-                                  className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-gray-600 transition-colors hover:bg-teal-50 hover:text-teal-700"
+                                  className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-slate-300 transition-colors hover:bg-[#37b5db]/10 hover:text-white"
                                 >
-                                  <ChevronRight className="size-3.5 text-teal-500" />
+                                  <ChevronRight className="size-3.5 text-[#a8e648]" />
                                   {child.label}
                                 </Link>
                               }
@@ -198,7 +198,7 @@ export function Header() {
                       render={
                         <Link
                           href={link.href}
-                          className="flex rounded-lg px-3 py-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 hover:text-teal-700"
+                          className="flex rounded-lg px-3 py-3 text-sm font-medium text-slate-200 transition-colors hover:bg-[#37b5db]/10 hover:text-white"
                         >
                           {link.label}
                         </Link>
@@ -209,12 +209,12 @@ export function Header() {
               </nav>
 
               {/* Mobile phone */}
-              <div className="mt-auto border-t border-gray-100 p-4">
+              <div className="mt-auto border-t border-[#37b5db]/20 p-4">
                 <a
                   href={siteConfig.phoneHref}
-                  className="flex items-center gap-2 text-sm font-medium text-gray-600"
+                  className="flex items-center gap-2 text-sm font-medium text-slate-300 transition-colors hover:text-[#37b5db]"
                 >
-                  <Phone className="size-4 text-teal-600" />
+                  <Phone className="size-4 text-[#37b5db]" />
                   {siteConfig.phone}
                 </a>
               </div>
